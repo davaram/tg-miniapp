@@ -25,6 +25,8 @@ details{margin-top:10px;background:#fff;border-radius:12px;padding:10px 12px;box
 summary{font-weight:700;color:#9a7b12;cursor:pointer}details ol{padding-left:20px;margin:6px 0}
 footer{font-size:12px;color:#999;margin:14px 0 20px;line-height:1.6}
 .hide{display:none}
+.jump{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}.jump .jl{font-size:12px;color:#999;margin-right:2px}
+.jump button{border:1.5px solid #ddd;background:#fff;border-radius:14px;padding:4px 11px;font-size:13px;cursor:pointer;color:#333}.jump button.on{background:#fff6d6;font-weight:700}
 </style></head><body><div class="wrap">
 <div class="nav"><span style="color:#999">Telegram 通知Bot · 金价</span><a href="gold24.html">⏱ 24 小时交互曲线 →</a></div>
 <h1>【金价】多日对比与长期位置</h1><div class="sub" id="sub">加载中…</div>
@@ -33,14 +35,16 @@ footer{font-size:12px;color:#999;margin:14px 0 20px;line-height:1.6}
 <section id="pA">
  <svg class="ch" id="cA"></svg>
  <div class="lg" id="lgA"></div>
+ <div class="jump" id="jA"></div>
  <div class="panel" id="infoA">手指按住图表左右拖动（电脑上移动鼠标），这里会同时显示三天在同一时刻的价格，以及今天比前两天高还是低。</div>
  <details id="howA"><summary>怎么看这张图</summary><ol id="howAl"></ol></details>
 </section>
 <section id="pB" class="hide">
  <div class="rng"><button data-y="1">1年</button><button data-y="3">3年</button><button data-y="5" class="on">5年</button></div>
  <svg class="ch" id="cB"></svg>
- <div class="lg"><i style="background:#b8860b"></i>日收盘　<i style="background:#7b1fa2"></i>你的第一批买入　<span style="color:#c0392b">●</span> 历史最高　<span style="color:#2e7d32">●</span> 1/3/5 年前　下图红色：离当时历史最高的回撤</div>
- <div class="panel" id="infoB">手指按住图表左右拖动（电脑上移动鼠标），这里会显示当天收盘、回撤和相对你成本的盈亏。</div>
+ <div class="jump" id="jB"></div>
+ <div class="lg"><i style="background:#b8860b"></i>日收盘　<i style="background:#7b1fa2"></i>你的第一批买入　大圆点＝当前范围的关键点（最高/最低/最深回撤/1·3·5 年前/现在，靠近会自动吸附）　下图红色：离当时历史最高的回撤</div>
+ <div class="panel" id="infoB">手指按住图表左右拖动（电脑上移动鼠标），靠近大圆点会自动吸附，也可以点下面的快速跳转；这里会显示当天收盘、回撤和相对你成本的盈亏。</div>
  <details id="howB"><summary>怎么看这张图</summary><ol id="howBl"></ol></details>
 </section>
 <footer id="ft">数据：Yahoo Finance GC=F（COMEX 黄金期货连续合约，非现货，略有延迟）· 台北时间 · 非投资建议</footer>
@@ -54,74 +58,117 @@ const hm=m=>{const t=(360+m)%1440;return String(Math.floor(t/60)).padStart(2,'0'
 let D,tab='A',yrs=5,cur={A:null,B:null};
 function showTip(cx,cy,h){tip.innerHTML=h;tip.style.display='block';const w=tip.offsetWidth,hh=tip.offsetHeight;
  let x=cx+16;if(x+w>innerWidth-6)x=cx-w-16;if(x<6)x=6;let y=cy-hh-18;if(y<6)y=cy+24;tip.style.left=x+'px';tip.style.top=y+'px'}
-function bind(svg,fn,info){let pin=false;
- svg.onmousemove=e=>{if(!pin){const h=fn(e.clientX);if(h){info.innerHTML=h;showTip(e.clientX,e.clientY,h)}}};
+// 通用交互：吸附关键点（水平 24px 内）、点击固定、快速跳转
+// o={W,keys:[{name,btn,item,x,y}],nearest(sx)->item,render(item,names,key)->{h,x,y},cursor(item,key),info,jump}
+function attach(svg,o){let pin=false,last=null;
+ const sc=()=>svg.getBoundingClientRect().width/o.W;
+ const namesAt=it=>o.keys.filter(k=>k.item===it).map(k=>k.name);
+ function resolve(cx){const r=svg.getBoundingClientRect(),sx=(cx-r.left)/r.width*o.W;let best=null,bd=24/sc();
+  for(const k of o.keys){const d=Math.abs(k.x-sx);if(d<=bd){bd=d;best=k}}
+  return best?{item:best.item,key:best}:{item:o.nearest(sx),key:null}}
+ function show(res,withTip){const nm=res.key?namesAt(res.item):[],R=o.render(res.item,nm,res.key);o.info.innerHTML=R.h;
+  if(withTip){const r=svg.getBoundingClientRect(),s=sc();showTip(r.left+R.x*s,r.top+R.y*s,R.h)}else tip.style.display='none';last=res}
+ svg.onmousemove=e=>{if(!pin)show(resolve(e.clientX),true)};
  svg.onmouseleave=()=>{if(!pin)tip.style.display='none'};
- svg.onclick=e=>{pin=!pin;const h=fn(e.clientX);if(h)info.innerHTML=h;tip.style.display='none'};
- const tm=e=>{e.preventDefault();const t=e.touches[0];const h=fn(t.clientX);if(h){info.innerHTML=h;showTip(t.clientX,t.clientY,h)}};
+ svg.onclick=e=>{const res=resolve(e.clientX);if(pin&&!res.key){pin=false;show(res,false);return}pin=true;show(res,true)};
+ const tm=e=>{e.preventDefault();pin=false;show(resolve(e.touches[0].clientX),true)};
  svg.addEventListener('touchstart',tm,{passive:false});svg.addEventListener('touchmove',tm,{passive:false});
- svg.addEventListener('touchend',()=>{tip.style.display='none'})}
+ svg.addEventListener('touchend',e=>{e.preventDefault();if(last&&last.key)pin=true;else tip.style.display='none'},{passive:false});
+ o.jump.innerHTML='<span class="jl">快速跳转</span>';
+ o.keys.forEach(k=>{if(!k.btn)return;const b=document.createElement('button');b.textContent=k.btn;b.style.borderColor=k.c;
+  b.onclick=()=>{pin=true;o.jump.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x==b));show({item:k.item,key:k},true)};o.jump.appendChild(b)})}
+// 关键点：大圆点 + 不重叠的标签
+function marks(svg,pts,bnd,placed=[]){
+ pts.forEach(p=>{el(svg,'circle',{cx:p.x,cy:p.y,r:6.5,fill:p.c,stroke:'#fff','stroke-width':2});placed.push({x1:p.x-7,x2:p.x+7,y1:p.y-7,y2:p.y+7})});
+ const C=[[0,-13,'middle'],[0,21,'middle'],[11,4,'start'],[-11,4,'end'],[0,-29,'middle'],[0,37,'middle'],[11,-14,'start'],[-11,-14,'end'],[11,22,'start'],[-11,22,'end'],[0,-45,'middle'],[0,53,'middle']];
+ const ov=(a,b)=>a.x1<b.x2&&a.x2>b.x1&&a.y1<b.y2&&a.y2>b.y1;
+ const C2=C.concat([[11,-30,'start'],[-11,-30,'end'],[11,38,'start'],[-11,38,'end'],[0,-61,'middle'],[0,69,'middle']]);
+ const area=(a,b)=>Math.max(0,Math.min(a.x2,b.x2)-Math.max(a.x1,b.x1))*Math.max(0,Math.min(a.y2,b.y2)-Math.max(a.y1,b.y1));
+ pts.forEach(p=>{const t=el(svg,'text',{'font-size':11,fill:p.c,'font-weight':700,stroke:'#fff','stroke-width':3,'paint-order':'stroke'},p.t);let best=null;
+  for(const [dx,dy,an] of C2){t.setAttribute('x',p.x+dx);t.setAttribute('y',p.y+dy);t.setAttribute('text-anchor',an);const g=t.getBBox();
+   let sh=0;if(g.x-2<bnd.l)sh=bnd.l-(g.x-2);else if(g.x+g.width+2>bnd.r)sh=bnd.r-(g.x+g.width+2);
+   const b={x1:g.x-2+sh,x2:g.x+g.width+2+sh,y1:g.y-1,y2:g.y+g.height+1};
+   const sc=(b.y1<bnd.t||b.y2>bnd.b?1e6:0)+placed.reduce((s,q)=>s+area(b,q),0)+Math.abs(sh)*0.5+Math.abs(dy)*0.1;
+   if(!best||sc<best.sc)best={sc,b,x:p.x+dx+sh,y:p.y+dy,an};if(sc<8)break}
+  t.setAttribute('x',best.x);t.setAttribute('y',best.y);t.setAttribute('text-anchor',best.an);placed.push(best.b)})}
 const COL=['#9aa7b8','#e06c3c','#d4a017'];
 function priceAt(o,mm){let b=null,bd=1e9;for(const p of o.pts){const d=Math.abs(p[0]-mm);if(d<bd){bd=d;b=p}}return bd<=15?b[1]:null}
 // ---------- 3 天叠加 ----------
 function drawA(){const svg=$('cA');svg.innerHTML='';const W=svg.clientWidth||900,mob=W<600,H=mob?Math.round(W*0.95):440;
  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.style.height=H+'px';
  const m={l:mob?44:56,r:mob?8:16,t:24,b:mob?52:44},O=D.overlay;
- const all=O.flatMap(o=>o.pts.map(p=>p[1])),lo=Math.min(...all,D.alerts[0])-10,hi=Math.max(...all,Math.max(...D.alerts.filter(a=>a<Math.max(...all)+60)))+10;
+ const all=O.flatMap(o=>o.pts.map(p=>p[1])),lo=Math.min(...all,D.alerts[0])-14,hi=Math.max(...all,Math.max(...D.alerts.filter(a=>a<Math.max(...all)+60)))+14;
  const X=mm=>m.l+mm/1440*(W-m.l-m.r),Y=v=>m.t+(hi-v)/(hi-lo)*(H-m.t-m.b);
  el(svg,'rect',{x:X(D.ny_session_min[0]),y:m.t,width:X(D.ny_session_min[1])-X(D.ny_session_min[0]),height:H-m.t-m.b,fill:'#888',opacity:.12});
  el(svg,'text',{x:(X(D.ny_session_min[0])+X(D.ny_session_min[1]))/2,y:m.t-8,'text-anchor':'middle','font-size':11,fill:'#777'},'纽约时段 21:30–04:00');
  const st=(hi-lo)>150?50:20;for(let v=Math.ceil(lo/st)*st;v<=hi;v+=st){el(svg,'line',{x1:m.l,x2:W-m.r,y1:Y(v),y2:Y(v),stroke:'#eee'});el(svg,'text',{x:m.l-6,y:Y(v)+4,'text-anchor':'end','font-size':11,fill:'#888'},v)}
  for(let h=0;h<=24;h+=mob?6:3){el(svg,'text',{x:X(h*60),y:H-m.b+16,'text-anchor':h==0?'start':h==24?'end':'middle','font-size':11,fill:'#888'},hm(h*60))}
  el(svg,'text',{x:(W+m.l)/2,y:H-m.b+32,'text-anchor':'middle','font-size':11,fill:'#999'},'台北时间（一个 COMEX 交易日：06:00 → 次日 06:00）');
- D.alerts.forEach(a=>{if(a<lo||a>hi)return;el(svg,'line',{x1:m.l,x2:W-m.r,y1:Y(a),y2:Y(a),stroke:'#1f6fd1','stroke-width':1.3});el(svg,'text',{x:W-m.r-4,y:Y(a)-4,'text-anchor':'end','font-size':11,fill:'#1f6fd1','font-weight':700},'你的提醒线 '+a)});
- if(D.stop>lo&&D.stop<hi){el(svg,'line',{x1:m.l,x2:W-m.r,y1:Y(D.stop),y2:Y(D.stop),stroke:'#f08c00','stroke-width':1.4,'stroke-dasharray':'6,4'});el(svg,'text',{x:m.l+4,y:Y(D.stop)-4,'font-size':11,fill:'#c06d00','font-weight':700},'止损密集区 ~'+D.stop+'（我的判断）')}
+ const placed=[],lbl=(x,y,t,c,an)=>{const e=el(svg,'text',{x,y,'text-anchor':an,'font-size':11,fill:c,'font-weight':700},t);const g=e.getBBox();placed.push({x1:g.x,x2:g.x+g.width,y1:g.y,y2:g.y+g.height})};
+ D.alerts.forEach(a=>{if(a<lo||a>hi)return;el(svg,'line',{x1:m.l,x2:W-m.r,y1:Y(a),y2:Y(a),stroke:'#1f6fd1','stroke-width':1.3});lbl(W-m.r-4,Y(a)-4,'你的提醒线 '+a,'#1f6fd1','end')});
+ if(D.stop>lo&&D.stop<hi){el(svg,'line',{x1:m.l,x2:W-m.r,y1:Y(D.stop),y2:Y(D.stop),stroke:'#f08c00','stroke-width':1.4,'stroke-dasharray':'6,4'});lbl(m.l+4,Y(D.stop)-4,'止损密集区 ~'+D.stop+'（我的判断）','#c06d00','start')}
  O.forEach((o,i)=>{el(svg,'path',{d:o.pts.map((p,k)=>(k?'L':'M')+X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(''),fill:'none',stroke:COL[i],'stroke-width':o.name=='今天'?2.8:1.8,'stroke-linejoin':'round'})});
- const T=O[2].pts.at(-1);el(svg,'circle',{cx:X(T[0]),cy:Y(T[1]),r:4,fill:COL[2]});
+ // 关键点
+ const T=O[2].pts,tH=T.reduce((a,b)=>b[1]>a[1]?b:a),tL=T.reduce((a,b)=>b[1]<a[1]?b:a),tN=T.at(-1);
+ let aL=null;O.forEach((o,i)=>o.pts.forEach(p=>{if(!aL||p[1]<aL.p[1])aL={p,i}}));
+ const keys=[{name:'今天最高',btn:'今天最高',item:tH[0],x:X(tH[0]),y:Y(tH[1]),c:'#2e7d32',lab:'今天高 '+f1(tH[1])},
+  {name:'今天最低',btn:'今天最低',item:tL[0],x:X(tL[0]),y:Y(tL[1]),c:'#c62828',lab:'今天低 '+f1(tL[1])},
+  {name:'三天最低（'+O[aL.i].name+'）',btn:'三天最低',item:aL.p[0],x:X(aL.p[0]),y:Y(aL.p[1]),c:'#8e0000',lab:'三天最低 '+f1(aL.p[1])},
+  {name:'现在',btn:'现在',item:tN[0],x:X(tN[0]),y:Y(tN[1]),c:'#222',lab:'现在 '+f1(tN[1])}];
+ // 同一位置的关键点合并标签
+ const mk=[];keys.forEach(k=>{const s=mk.find(q=>Math.abs(q.x-k.x)<1&&Math.abs(q.y-k.y)<1);if(s)s.t=s.t.replace(/ [\d.]+$/,'')+' · '+k.lab;else mk.push({x:k.x,y:k.y,c:k.c,t:k.lab})});
+ marks(svg,mk,{l:m.l,r:W-m.r,t:m.t,b:H-m.b},placed);
  const vl=el(svg,'line',{y1:m.t,y2:H-m.b,stroke:'#666','stroke-dasharray':'3,3',visibility:'hidden'}),dots=O.map((o,i)=>el(svg,'circle',{r:5,fill:'#fff',stroke:COL[i],'stroke-width':2.5,visibility:'hidden'}));
- $('lgA').innerHTML=O.map((o,i)=>`<span style="white-space:nowrap"><i style="background:${COL[i]}"></i>${o.name} ${o.session.slice(5).replace('-','/')} ${o.name=='今天'?'现价':'收盘'} <b>${f1(o.end)}</b> <span class="${cls(o.chg)}">${sg(o.chg)}（${sg(o.pct,2)}%）</span></span>`).join('　')+'<br><i style="background:#1f6fd1"></i>你的提醒线　<i style="background:#f08c00"></i>止损密集区（我的判断）　灰色＝纽约时段';
- bind(svg,cx=>{const r=svg.getBoundingClientRect(),sx=(cx-r.left)/r.width*W;let mm=Math.round(((sx-m.l)/(W-m.l-m.r)*1440)/15)*15;mm=Math.max(0,Math.min(1425,mm));
-  vl.setAttribute('x1',X(mm));vl.setAttribute('x2',X(mm));vl.setAttribute('visibility','visible');
-  const v=O.map(o=>priceAt(o,mm));v.forEach((p,i)=>{if(p==null)dots[i].setAttribute('visibility','hidden');else{dots[i].setAttribute('cx',X(mm));dots[i].setAttribute('cy',Y(p));dots[i].setAttribute('visibility','visible')}});
-  let h=`<b>${hm(mm)}</b>（台北）${mm>=D.ny_session_min[0]&&mm<D.ny_session_min[1]?' · 纽约时段':''}`;
-  O.forEach((o,i)=>{h+=`<br><span style="color:${COL[i]}">●</span> ${o.name} ${o.session.slice(5).replace('-','/')}：<b>${v[i]==null?'—':f1(v[i])}</b>`});
-  if(v[2]!=null){[1,0].forEach(i=>{if(v[i]!=null){const d=v[2]-v[i];h+=`<br>今天比${O[i].name} <b class="${cls(d)}">${sg(d)}（${sg(d/v[i]*100,2)}%）</b>`}})}else h+='<br><span style="color:#999">今天还没走到这个时刻</span>';
-  return h},$('infoA'));
+ $('lgA').innerHTML=O.map((o,i)=>`<span style="white-space:nowrap"><i style="background:${COL[i]}"></i>${o.name} ${o.session.slice(5).replace('-','/')} ${o.name=='今天'?'现价':'收盘'} <b>${f1(o.end)}</b> <span class="${cls(o.chg)}">${sg(o.chg)}（${sg(o.pct,2)}%）</span></span>`).join('　')+'<br><i style="background:#1f6fd1"></i>你的提醒线　<i style="background:#f08c00"></i>止损密集区（我的判断）　灰色＝纽约时段　大圆点＝关键点（靠近会自动吸附）';
+ attach(svg,{W,keys,info:$('infoA'),jump:$('jA'),
+  nearest:sx=>Math.max(0,Math.min(1425,Math.round(((sx-m.l)/(W-m.l-m.r)*1440)/15)*15)),
+  render:(mm,names,key)=>{vl.setAttribute('x1',X(mm));vl.setAttribute('x2',X(mm));vl.setAttribute('visibility','visible');
+   const v=O.map(o=>priceAt(o,mm));v.forEach((p,i)=>{if(p==null)dots[i].setAttribute('visibility','hidden');else{dots[i].setAttribute('cx',X(mm));dots[i].setAttribute('cy',Y(p));dots[i].setAttribute('visibility','visible')}});
+   let h=(names.length?`<div style="color:${key.c};font-weight:700">📍 ${names.join(' · ')}</div>`:'')+`<b>${hm(mm)}</b>（台北）${mm>=D.ny_session_min[0]&&mm<D.ny_session_min[1]?' · 纽约时段':''}`;
+   O.forEach((o,i)=>{h+=`<br><span style="color:${COL[i]}">●</span> ${o.name} ${o.session.slice(5).replace('-','/')}：<b>${v[i]==null?'—':f1(v[i])}</b>`});
+   if(v[2]!=null){[1,0].forEach(i=>{if(v[i]!=null){const d=v[2]-v[i];h+=`<br>今天比${O[i].name} <b class="${cls(d)}">${sg(d)}（${sg(d/v[i]*100,2)}%）</b>`}})}else h+='<br><span style="color:#999">今天还没走到这个时刻</span>';
+   const yy=key?key.y:Y(v[2]??v[1]??v[0]);return {h,x:X(mm),y:yy}}});
 }
 // ---------- 5 年位置 ----------
-function drawB(){const svg=$('cB');svg.innerHTML='';const W=svg.clientWidth||900,mob=W<600,H=mob?Math.round(W*1.15):520;
+function drawB(){const svg=$('cB');svg.innerHTML='';const W=svg.clientWidth||900,mob=W<600,H=mob?Math.round(W*1.2):540;
  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.style.height=H+'px';
  const dl=D.daily,ld=new Date(D.last_date);const sd=new Date(ld);sd.setFullYear(sd.getFullYear()-yrs);const sds=sd.toISOString().slice(0,10);
  let i0=0;dl.d.forEach((d,k)=>{if(d<=sds)i0=k});const N=dl.d.length,idx=[...Array(N-i0).keys()].map(k=>k+i0);
- const m={l:mob?44:56,r:mob?10:18,t:16,b:24},gap=26,h1=(H-m.t-m.b-gap)*0.68,h2=H-m.t-m.b-gap-h1,y2t=m.t+h1+gap;
- const cs=idx.map(i=>dl.c[i]),lo=Math.min(...cs,D.cost)*0.97,hi=Math.max(...cs,D.cost)*1.02,dmin=Math.min(...idx.map(i=>dl.dd[i]))-2;
+ const m={l:mob?44:56,r:mob?10:18,t:22,b:24},gap=30,h1=(H-m.t-m.b-gap)*0.68,h2=H-m.t-m.b-gap-h1,y2t=m.t+h1+gap;
+ const cs=idx.map(i=>dl.c[i]),lo=Math.min(...cs,D.cost)*0.96,hi=Math.max(...cs,D.cost)*1.025,dmin=Math.min(...idx.map(i=>dl.dd[i]))*1.25-1;
  const ts=s=>Date.parse(s),t0=ts(dl.d[i0]),t1=ts(dl.d[N-1]);
  const X=s=>m.l+(ts(s)-t0)/(t1-t0)*(W-m.l-m.r),Y=v=>m.t+(hi-v)/(hi-lo)*h1,Y2=v=>y2t+(-v)/(-dmin)*h2;
  const st=[100,200,250,500,1000].find(s=>(hi-lo)/s<=6);for(let v=Math.ceil(lo/st)*st;v<=hi;v+=st){el(svg,'line',{x1:m.l,x2:W-m.r,y1:Y(v),y2:Y(v),stroke:'#eee'});el(svg,'text',{x:m.l-6,y:Y(v)+4,'text-anchor':'end','font-size':11,fill:'#888'},v)}
  const s2=dmin<-20?10:5;for(let v=0;v>=dmin;v-=s2){el(svg,'line',{x1:m.l,x2:W-m.r,y1:Y2(v),y2:Y2(v),stroke:'#f3e3e3'});el(svg,'text',{x:m.l-6,y:Y2(v)+4,'text-anchor':'end','font-size':10,fill:'#c0392b'},v+'%')}
- // 时间刻度
  const y0=+dl.d[i0].slice(0,4),y1=+dl.d[N-1].slice(0,4);
  if(yrs==1){for(let k=0;k<=12;k++){const dt=new Date(Date.UTC(y0,+dl.d[i0].slice(5,7)-1+k,1)).toISOString().slice(0,10);if(dt<dl.d[i0]||dt>dl.d[N-1])continue;if(mob&&k%2)continue;el(svg,'line',{x1:X(dt),x2:X(dt),y1:m.t,y2:y2t+h2,stroke:'#f2f2f2'});el(svg,'text',{x:X(dt),y:H-6,'text-anchor':'middle','font-size':11,fill:'#888'},dt.slice(2,7).replace('-','/'))}}
  else for(let y=y0+1;y<=y1;y++){const dt=y+'-01-01';el(svg,'line',{x1:X(dt),x2:X(dt),y1:m.t,y2:y2t+h2,stroke:'#f2f2f2'});el(svg,'text',{x:X(dt),y:H-6,'text-anchor':'middle','font-size':11,fill:'#888'},y)}
- el(svg,'text',{x:m.l+4,y:y2t-6,'font-size':11,fill:'#c0392b'},'离历史最高的回撤 %');
- // 成本线
+ const placed=[];
+ const t2=el(svg,'text',{x:m.l+4,y:y2t-8,'font-size':11,fill:'#c0392b'},'离历史最高的回撤 %');{const g=t2.getBBox();placed.push({x1:g.x,x2:g.x+g.width,y1:g.y,y2:g.y+g.height})}
  el(svg,'line',{x1:m.l,x2:W-m.r,y1:Y(D.cost),y2:Y(D.cost),stroke:'#7b1fa2','stroke-width':1.3,'stroke-dasharray':'6,4'});
- el(svg,'text',{x:m.l+4,y:Y(D.cost)-5,'font-size':11,fill:'#7b1fa2','font-weight':700},'你的第一批买入 ~'+D.cost);
+ const ct=el(svg,'text',{x:m.l+4,y:Y(D.cost)-5,'font-size':11,fill:'#7b1fa2','font-weight':700,stroke:'#fff','stroke-width':3,'paint-order':'stroke'},'你的第一批买入 ~'+D.cost);{const g=ct.getBBox();placed.push({x1:g.x,x2:g.x+g.width,y1:g.y,y2:g.y+g.height})}
  const pd=idx.map((i,k)=>(k?'L':'M')+X(dl.d[i]).toFixed(1)+','+Y(dl.c[i]).toFixed(1)).join('');
  el(svg,'path',{d:pd,fill:'none',stroke:'#b8860b','stroke-width':1.6,'stroke-linejoin':'round'});
  const dp=idx.map((i,k)=>(k?'L':'M')+X(dl.d[i]).toFixed(1)+','+Y2(dl.dd[i]).toFixed(1)).join('');
  el(svg,'path',{d:dp+`L${X(dl.d[N-1])},${Y2(0)}L${X(dl.d[i0])},${Y2(0)}Z`,fill:'#c0392b',opacity:.22});el(svg,'path',{d:dp,fill:'none',stroke:'#c0392b','stroke-width':1});
- // 标注
- const lab=(x,y,t,c,anc)=>{const e=el(svg,'text',{x,y,'text-anchor':anc,'font-size':11,fill:c,'font-weight':700,stroke:'#fff','stroke-width':3,'paint-order':'stroke'},t)};
- const A=D.ath;if(A.date>=dl.d[i0]){el(svg,'circle',{cx:X(A.date),cy:Y(A.close),r:4.5,fill:'#c0392b'});lab(X(A.date)-7,Y(A.close)+4,'历史最高 '+f1(A.close),'#c0392b','end')}
- Object.entries(D.anchors).forEach(([k,a])=>{if(a.base_date<dl.d[i0])return;const x=X(a.base_date),y=Y(a.base_close);el(svg,'circle',{cx:x,cy:y,r:4,fill:'#2e7d32'});lab(Math.max(x,m.l+30),y-10,k+'前 '+Math.round(a.base_close)+' → '+sg(a.pct)+'%','#2e7d32',x<m.l+60?'start':'middle')});
- el(svg,'circle',{cx:X(D.last_date),cy:Y(D.last),r:4,fill:'#222'});lab(X(D.last_date)-6,Y(D.last)+18,'现价 '+f1(D.last),'#222','end');
- lab(X(D.last_date)-4,Y2(dl.dd[N-1])+14,f1(dl.dd[N-1])+'%','#c0392b','end');
+ // 当前范围内的关键点
+ const iH=idx.reduce((a,b)=>dl.c[b]>dl.c[a]?b:a),iL=idx.reduce((a,b)=>dl.c[b]<dl.c[a]?b:a),iD=idx.reduce((a,b)=>dl.dd[b]<dl.dd[a]?b:a);
+ const md=d=>d.slice(2).replace(/-/g,'/');
+ const keys=[{name:'区间最高'+(dl.d[iH]==D.ath.date?'（历史最高）':''),btn:'最高',item:iH,c:'#c0392b',lab:'最高 '+f1(dl.c[iH])},
+  {name:'区间最低',btn:'最低',item:iL,c:'#1565c0',lab:'最低 '+f1(dl.c[iL])},
+  {name:'区间最深回撤',btn:'最深回撤',item:iD,c:'#8e0000',lab:'最深 '+f1(dl.dd[iD])+'%',low:true}];
+ Object.entries(D.anchors).forEach(([k,a])=>{const i=dl.d.indexOf(a.base_date);if(i>=i0)keys.push({name:k+'前',btn:k+'前',item:i,c:'#2e7d32',lab:k+'前 '+Math.round(a.base_close)+' → '+sg(a.pct,0)+'%'})});
+ keys.push({name:'现在',btn:'现在',item:N-1,c:'#222',lab:'现在 '+f1(D.last)});
+ keys.forEach(k=>{k.x=X(dl.d[k.item]);k.y=k.low?Y2(dl.dd[k.item]):Y(dl.c[k.item])});
+ const mk=[];keys.forEach(k=>{const s=mk.find(q=>Math.abs(q.x-k.x)<1&&Math.abs(q.y-k.y)<1);if(s)s.t=s.t.split(' ')[0]+' · '+k.lab;else mk.push({x:k.x,y:k.y,c:k.c,t:k.lab})});
+ marks(svg,mk,{l:m.l,r:W-m.r,t:2,b:H-18},placed);
  const vl=el(svg,'line',{y1:m.t,y2:y2t+h2,stroke:'#666','stroke-dasharray':'3,3',visibility:'hidden'}),d1=el(svg,'circle',{r:5,fill:'#fff',stroke:'#b8860b','stroke-width':2.5,visibility:'hidden'}),d2=el(svg,'circle',{r:4,fill:'#fff',stroke:'#c0392b','stroke-width':2,visibility:'hidden'});
- bind(svg,cx=>{const r=svg.getBoundingClientRect(),sx=(cx-r.left)/r.width*W,tt=t0+(sx-m.l)/(W-m.l-m.r)*(t1-t0);let b=i0,bd=1e18;for(const i of idx){const d=Math.abs(ts(dl.d[i])-tt);if(d<bd){bd=d;b=i}}
-  const x=X(dl.d[b]);vl.setAttribute('x1',x);vl.setAttribute('x2',x);vl.setAttribute('visibility','visible');d1.setAttribute('cx',x);d1.setAttribute('cy',Y(dl.c[b]));d1.setAttribute('visibility','visible');d2.setAttribute('cx',x);d2.setAttribute('cy',Y2(dl.dd[b]));d2.setAttribute('visibility','visible');
-  const pc=(dl.c[b]/D.cost-1)*100,toNow=(D.last/dl.c[b]-1)*100;
-  return `<b>${dl.d[b]}</b>${b==N-1?'（今天，盘中）':''}<br>收盘 <b>${f1(dl.c[b])}</b><br>离当时历史最高 <b class="dn">${f1(dl.dd[b])}%</b><br>相对你的成本 ${D.cost}：<b class="${cls(pc)}">${sg(pc)}%</b>${b<N-1?`<br><span style="color:#888">从这天到现在 ${sg(toNow)}%</span>`:''}`},$('infoB'));
+ attach(svg,{W,keys,info:$('infoB'),jump:$('jB'),
+  nearest:sx=>{const tt=t0+(sx-m.l)/(W-m.l-m.r)*(t1-t0);let b=i0,bd=1e18;for(const i of idx){const d=Math.abs(ts(dl.d[i])-tt);if(d<bd){bd=d;b=i}}return b},
+  render:(b,names,key)=>{const x=X(dl.d[b]);vl.setAttribute('x1',x);vl.setAttribute('x2',x);vl.setAttribute('visibility','visible');d1.setAttribute('cx',x);d1.setAttribute('cy',Y(dl.c[b]));d1.setAttribute('visibility','visible');d2.setAttribute('cx',x);d2.setAttribute('cy',Y2(dl.dd[b]));d2.setAttribute('visibility','visible');
+   const pc=(dl.c[b]/D.cost-1)*100,toNow=(D.last/dl.c[b]-1)*100;
+   const h=(names.length?`<div style="color:${key.c};font-weight:700">📍 ${names.join(' · ')}</div>`:'')+`<b>${dl.d[b]}</b>${b==N-1?'（今天，盘中）':''}<br>收盘 <b>${f1(dl.c[b])}</b><br>离当时历史最高 <b class="dn">${f1(dl.dd[b])}%</b><br>相对你的成本 ${D.cost}：<b class="${cls(pc)}">${sg(pc)}%</b>${b<N-1?`<br><span style="color:#888">从这天到现在 ${sg(toNow)}%</span>`:''}`;
+   return {h,x,y:key?key.y:Y(dl.c[b])}}});
 }
 function how(){const O=D.overlay,[a,b,c]=O,R=D.returns;
  const tl=c.pts.at(-1),pa=priceAt(a,tl[0]),pb=priceAt(b,tl[0]);
