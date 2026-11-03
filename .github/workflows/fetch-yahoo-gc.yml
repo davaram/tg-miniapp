@@ -1,0 +1,30 @@
+name: fetch-yahoo-gc
+on:
+  workflow_dispatch:
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Yahoo GC=F
+        run: |
+          set -euo pipefail
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+          curl -fsS --max-time 60 -A "$UA" -H 'Accept: application/json' \
+            'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=10y&interval=1d' \
+            -o daily.json
+          curl -fsS --max-time 60 -A "$UA" -H 'Accept: application/json' \
+            'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=5d&interval=15m' \
+            -o gc15_5d.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('daily.json'))['chart']['result'][0]
+          print('daily bars', len(d['timestamp']), 'meta', d['meta'].get('regularMarketPrice'), d['meta'].get('exchangeTimezoneName'))
+          m=json.load(open('gc15_5d.json'))['chart']['result'][0]
+          print('15m bars', len(m['timestamp']), 'last_ts', m['timestamp'][-1], 'last_close', m['indicators']['quote'][0]['close'][-1])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yahoo-gc
+          path: |
+            daily.json
+            gc15_5d.json
